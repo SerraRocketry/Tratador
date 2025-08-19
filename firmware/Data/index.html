@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Tratador</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0px;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h1>Tratador automático</h1>
+    <div style="display: flex; flex-direction: column; align-items: center">
+      <h2>Horários:</h2>
+      <p>Quais horários o tratador automático será ativado ao longo do dia.</p>
+      <h3>Manhã:</h3>
+      <input type="time" id="morning" name="morning" value="07:00" />
+      <h3>Tarde:</h3>
+      <input type="time" id="afternoon" name="afternoon" value="13:00" />
+      <h3>Noite:</h3>
+      <input type="time" id="evening" name="evening" value="19:00" />
+    </div>
+
+    <div style="display: flex; flex-direction: column; align-items: center">
+      <h2>Quantidade:</h2>
+      <p>
+        Quanto de ração será oferecida, é baseado no tempo de acionamento (mais
+        tempo = mais ração)
+      </p>
+      <h3>Tempo ativo (s):</h3>
+      <input
+        type="number"
+        id="activeTime"
+        name="activeTime"
+        value="1"
+        min="0.1"
+        max="60"
+      />
+    </div>
+    <div
+      style="
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        padding: 10px;
+      "
+    >
+      <button style="margin: 5px" id="test">Testar</button>
+      <button style="margin: 5px" id="save">Salvar</button>
+    </div>
+    <script>
+      // Função para carregar as configurações atuais do ESP8266 quando a página abre
+      window.addEventListener("load", function () {
+        fetch("/settings")
+          .then((response) => response.json())
+          .then((data) => {
+            document.getElementById("morning").value = data.morning;
+            document.getElementById("afternoon").value = data.afternoon;
+            document.getElementById("evening").value = data.evening;
+            document.getElementById("activeTime").value = data.activeTime;
+          });
+      });
+
+      // Evento para o botão de TESTE
+      document.getElementById("test").addEventListener("click", function () {
+        const activeTime = document.getElementById("activeTime").value;
+
+        // Envia o comando de teste para o ESP8266 via POST
+        fetch("/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `activeTime=${activeTime}`,
+        })
+          .then((response) => response.text())
+          .then((data) => {
+            console.log(data);
+            alert(`Motor ativado por ${activeTime} segundos!`);
+          });
+      });
+
+      // Evento para o botão de SALVAR
+      document.getElementById("save").addEventListener("click", function () {
+        const morning = document.getElementById("morning").value;
+        const afternoon = document.getElementById("afternoon").value;
+        const evening = document.getElementById("evening").value;
+        const activeTime = document.getElementById("activeTime").value;
+
+        const formData = `morning=${morning}&afternoon=${afternoon}&evening=${evening}&activeTime=${activeTime}`;
+
+        // Envia os novos dados para o ESP8266 salvar via POST
+        fetch("/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: formData,
+        })
+          .then((response) => response.text())
+          .then((data) => {
+            console.log(data);
+            alert("Configurações salvas com sucesso!");
+          });
+      });
+    </script>
+  </body>
+</html>
