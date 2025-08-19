@@ -6,8 +6,8 @@
 #include <time.h> // Biblioteca para lidar com o tempo
 
 // --- Configurações de Wi-Fi ---
-const char *ssid = "LaRA";
-const char *password = "Iamarobot";
+const char *ssid = "SSID";
+const char *password = "PASSWORD";
 
 // --- Configurações de Tempo (NTP) ---
 const char *ntpServer = "a.st1.ntp.br"; // Servidor NTP brasileiro
