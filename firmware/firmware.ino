@@ -1,27 +1,27 @@
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
-#include <Servo.h>
-#include "FS.h"
-#include <ArduinoJson.h>
-#include <time.h> // Biblioteca para lidar com o tempo
+#include<ESP8266WiFi.h> 
+#include<ESP8266WebServer.h> 
+#include <Servo.h> 
+#include“FS.h” 
+#include<ArduinoJson.h> 
+#include<time.h> // Biblioteca para lidar com o tempo
 
-// --- Configurações de Wi-Fi ---
-const char *ssid = "SSID";
-const char *password = "PASSWORD";
+// — Configurações de Wi-Fi — 
+const char ssid = “SSID”; 
+const char password = “PASSWORD”;
 
-// --- Configurações de Tempo (NTP) ---
-const char *ntpServer = "a.st1.ntp.br"; // Servidor NTP brasileiro
-const long gmtOffset_sec = -3 * 3600;   // Offset para o fuso horário de Brasília (UTC-3)
-const int daylightOffset_sec = 0;       // O Brasil não utiliza mais horário de verão
+// — Configurações de Tempo (NTP) — 
+const char ntpServer = “a.st1.ntp.br”; // Servidor NTP brasileiro 
+const long gmtOffset_sec = -3 3600; // Offset para o fuso horário de Brasília (UTC-3) 
+const int daylightOffset_sec = 0; // O Brasil não utiliza mais horário de verão
 
-// --- Componentes ---
-Servo meuServo;
+// — Componentes — S
+ervo meuServo; 
 ESP8266WebServer server(80);
 
-int pinoServo = D4;
+int pinoServo = 2;
 
-// --- Variáveis de Controle ---
-String horarios[3] = {"07:00", "13:00", "19:00"};
+// — Variáveis de Controle — 
+String horarios[3] = {“07:00”, “13:00”, “19:00”}; 
 float tempoMotorLigado = 1.0; // Em segundos
 
 bool refeicaoServida[3] = {false, false, false};
@@ -30,7 +30,7 @@ void setup()
 {
     Serial.begin(115200);
     meuServo.attach(pinoServo);
-    meuServo.write(0);
+    meuServo.write(160);
 
     if (!SPIFFS.begin())
     {
@@ -64,9 +64,9 @@ void setup()
     // --- Endpoints do Servidor Web (permanecem os mesmos) ---
     server.on("/", HTTP_GET, []()
               {
-    File file = SPIFFS.open("/index.html", "r");
-    server.streamFile(file, "text/html");
-    file.close(); });
+File file = SPIFFS.open("/index.html", "r");
+server.streamFile(file, "text/html");
+file.close(); });
     server.on("/settings", HTTP_GET, handleGetSettings);
     server.on("/save", HTTP_POST, handleSaveSettings);
     server.on("/test", HTTP_POST, handleTestMotor);
@@ -77,6 +77,8 @@ void setup()
 void loop()
 {
     server.handleClient();
+
+    meuServo.detach();
 
     // --- LÓGICA DE ALIMENTAÇÃO COM HORA DA INTERNET ---
     time_t now = time(nullptr);
@@ -109,20 +111,25 @@ void loop()
 
 void alimentar()
 {
+    meuServo.attach(pinoServo);
+
     Serial.println("Liberando ração...");
-    meuServo.write(90);
-    delay(tempoMotorLigado * 1000); // Converte segundos para milissegundos
     meuServo.write(0);
+    delay(tempoMotorLigado * 1000); // Converte segundos para milissegundos
+    meuServo.write(160);
     Serial.println("Ração liberada.");
+    delay(1000);
+
+    meuServo.detach();
 }
 
 void handleGetSettings()
 {
     StaticJsonDocument<200> doc;
-    doc["morning"] = horarios[0];
-    doc["afternoon"] = horarios[1];
-    doc["evening"] = horarios[2];
-    doc["activeTime"] = tempoMotorLigado;
+    doc[“morning”] = horarios[0];
+    doc[“afternoon”] = horarios[1];
+    doc[“evening”] = horarios[2];
+    doc[“activeTime”] = tempoMotorLigado;
 
     String output;
     serializeJson(doc, output);
@@ -132,12 +139,12 @@ void handleGetSettings()
 
 void handleSaveSettings()
 {
-    if (server.hasArg("morning") && server.hasArg("afternoon") && server.hasArg("evening") && server.hasArg("activeTime"))
+    if (server.hasArg(“morning”) && server.hasArg(“afternoon”) && server.hasArg(“evening”) && server.hasArg(“activeTime”))
     {
-        horarios[0] = server.arg("morning");
-        horarios[1] = server.arg("afternoon");
-        horarios[2] = server.arg("evening");
-        tempoMotorLigado = server.arg("activeTime").toFloat();
+        horarios[0] = server.arg(“morning”);
+        horarios[1] = server.arg(“afternoon”);
+        horarios[2] = server.arg(“evening”);
+        tempoMotorLigado = server.arg(“activeTime”).toFloat();
 
         salvarConfiguracoes();
         server.send(200, "text/plain", "Configurações salvas com sucesso!");
@@ -150,16 +157,21 @@ void handleSaveSettings()
 
 void handleTestMotor()
 {
-    if (server.hasArg("activeTime"))
+    if (server.hasArg(“activeTime”))
     {
-        float testTime = server.arg("activeTime").toFloat();
-        Serial.print("Testando motor por ");
+        float testTime = server.arg(“activeTime”).toFloat();
+        Serial.print(“Testando motor por”);
         Serial.print(testTime);
-        Serial.println(" segundos.");
+        Serial.println(” segundos.”);
 
-        meuServo.write(90);
-        delay(testTime * 1000);
+        meuServo.attach(pinoServo);
+
         meuServo.write(0);
+        delay(testTime * 1000);
+        meuServo.write(160);
+        delay(testTime * 1000);
+
+        meuServo.detach();
 
         server.send(200, "text/plain", "Teste concluído");
     }
@@ -171,7 +183,7 @@ void handleTestMotor()
 
 void salvarConfiguracoes()
 {
-    File arquivo = SPIFFS.open("/config.txt", "w");
+    File arquivo = SPIFFS.open(“/ config.txt”, “w”);
     if (!arquivo)
         return;
 
@@ -186,10 +198,10 @@ void salvarConfiguracoes()
 
 void carregarConfiguracoes()
 {
-    File arquivo = SPIFFS.open("/config.txt", "r");
+    File arquivo = SPIFFS.open(“/ config.txt”, “r”);
     if (!arquivo)
     {
-        Serial.println("Arquivo de config não encontrado, usando padrões.");
+        Serial.println(“Arquivo de config não encontrado, usando padrões.”);
         return;
     }
 
