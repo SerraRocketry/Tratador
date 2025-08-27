@@ -1,36 +1,37 @@
-#include<ESP8266WiFi.h> 
-#include<ESP8266WebServer.h> 
-#include <Servo.h> 
-#include“FS.h” 
-#include<ArduinoJson.h> 
-#include<time.h> // Biblioteca para lidar com o tempo
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include <Servo.h>
+#include <FS.h>                 
+#include <ArduinoJson.h>
+#include <time.h>             
 
-// — Configurações de Wi-Fi — 
-const char ssid = “SSID”; 
-const char password = “PASSWORD”;
+// --- Configurações de Wi-Fi ---
+const char* ssid = "SEU_SSID";      
+const char* password = "SUA_SENHA";
 
-// — Configurações de Tempo (NTP) — 
-const char ntpServer = “a.st1.ntp.br”; // Servidor NTP brasileiro 
-const long gmtOffset_sec = -3 3600; // Offset para o fuso horário de Brasília (UTC-3) 
-const int daylightOffset_sec = 0; // O Brasil não utiliza mais horário de verão
+// --- Configurações de Tempo (NTP) ---
+const char* ntpServer = "a.st1.ntp.br";
+const long gmtOffset_sec = -3 * 3600;
+const int daylightOffset_sec = 0;
 
-// — Componentes — S
-ervo meuServo; 
+// --- Componentes ---
+Servo meuServo;
 ESP8266WebServer server(80);
-
 int pinoServo = 2;
 
-// — Variáveis de Controle — 
-String horarios[3] = {“07:00”, “13:00”, “19:00”}; 
-float tempoMotorLigado = 1.0; // Em segundos
-
+// --- Variáveis de Controle ---
+String horarios[3] = {"07:00", "13:00", "19:00"};
+float tempoMotorLigado = 1.0;
 bool refeicaoServida[3] = {false, false, false};
+int ultimoDiaDoAno = -1; 
 
 void setup()
 {
     Serial.begin(115200);
     meuServo.attach(pinoServo);
-    meuServo.write(160);
+    meuServo.write(160); 
+    delay(500);
+    meuServo.detach(); 
 
     if (!SPIFFS.begin())
     {
@@ -42,6 +43,7 @@ void setup()
 
     // --- Conexão Wi-Fi ---
     WiFi.begin(ssid, password);
+    Serial.print("Conectando ao WiFi");
     while (WiFi.status() != WL_CONNECTED)
     {
         delay(500);
@@ -51,22 +53,30 @@ void setup()
     Serial.print("IP: ");
     Serial.println(WiFi.localIP());
 
-    // --- SINCRONIZAÇÃO DA HORA PELA INTERNET ---
+    // --- Sincronização da Hora ---
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
     Serial.print("Sincronizando hora");
     while (time(nullptr) < 8 * 3600 * 2)
-    { // Espera até que a hora seja válida
-        Serial.print(".");
+    {
         delay(500);
+        Serial.print(".");
     }
     Serial.println("\nHora sincronizada!");
 
-    // --- Endpoints do Servidor Web (permanecem os mesmos) ---
-    server.on("/", HTTP_GET, []()
-              {
-File file = SPIFFS.open("/index.html", "r");
-server.streamFile(file, "text/html");
-file.close(); });
+    time_t now = time(nullptr);
+    struct tm* timeinfo = localtime(&now);
+    ultimoDiaDoAno = timeinfo->tm_yday;
+
+    // --- Endpoints do Servidor Web ---
+    server.on("/", HTTP_GET, []() {
+        File file = SPIFFS.open("/index.html", "r");
+        if (!file) {
+            server.send(404, "text/plain", "Arquivo index.html nao encontrado");
+            return;
+        }
+        server.streamFile(file, "text/html");
+        file.close();
+    });
     server.on("/settings", HTTP_GET, handleGetSettings);
     server.on("/save", HTTP_POST, handleSaveSettings);
     server.on("/test", HTTP_POST, handleTestMotor);
@@ -78,20 +88,17 @@ void loop()
 {
     server.handleClient();
 
-    meuServo.detach();
-
-    // --- LÓGICA DE ALIMENTAÇÃO COM HORA DA INTERNET ---
     time_t now = time(nullptr);
-    struct tm *timeinfo;
-    timeinfo = localtime(&now);
+    struct tm* timeinfo = localtime(&now);
 
-    // Reinicia o controle de refeição servida à meia-noite
-    if (timeinfo->tm_hour == 0 && timeinfo->tm_min == 0)
+    if (timeinfo->tm_yday != ultimoDiaDoAno)
     {
+        Serial.println("Novo dia detectado! Reiniciando controle de refeições.");
         for (int i = 0; i < 3; i++)
         {
             refeicaoServida[i] = false;
         }
+        ultimoDiaDoAno = timeinfo->tm_yday;
     }
 
     for (int i = 0; i < 3; i++)
@@ -99,52 +106,51 @@ void loop()
         int hora = horarios[i].substring(0, 2).toInt();
         int minuto = horarios[i].substring(3, 5).toInt();
 
-        // Compara a hora e minuto atuais com os horários programados
         if (timeinfo->tm_hour == hora && timeinfo->tm_min == minuto && !refeicaoServida[i])
         {
             alimentar();
             refeicaoServida[i] = true;
         }
     }
-    delay(10);
+    delay(1000); 
 }
 
 void alimentar()
 {
-    meuServo.attach(pinoServo);
+    meuServo.attach(pinoServo); 
+    delay(50); 
 
     Serial.println("Liberando ração...");
     meuServo.write(0);
-    delay(tempoMotorLigado * 1000); // Converte segundos para milissegundos
+    delay(tempoMotorLigado * 1000);
     meuServo.write(160);
-    Serial.println("Ração liberada.");
-    delay(1000);
+    delay(500); 
 
-    meuServo.detach();
+    Serial.println("Ração liberada.");
+    meuServo.detach(); 
 }
 
 void handleGetSettings()
 {
     StaticJsonDocument<200> doc;
-    doc[“morning”] = horarios[0];
-    doc[“afternoon”] = horarios[1];
-    doc[“evening”] = horarios[2];
-    doc[“activeTime”] = tempoMotorLigado;
+    doc["morning"] = horarios[0];
+    doc["afternoon"] = horarios[1];
+    doc["evening"] = horarios[2];
+    doc["activeTime"] = tempoMotorLigado;
 
     String output;
     serializeJson(doc, output);
-
     server.send(200, "application/json", output);
 }
 
 void handleSaveSettings()
 {
-    if (server.hasArg(“morning”) && server.hasArg(“afternoon”) && server.hasArg(“evening”) && server.hasArg(“activeTime”))
+    if (server.hasArg("morning") && server.hasArg("afternoon") && server.hasArg("evening") && server.hasArg("activeTime"))
     {
-        horarios[0] = server.arg(“morning”);
-        horarios[1] = server.arg(“afternoon”);
-        horarios[2] = server.arg(“evening”);
-        tempoMotorLigado = server.arg(“activeTime”).toFloat();
+        horarios[0] = server.arg("morning");
+        horarios[1] = server.arg("afternoon");
+        horarios[2] = server.arg("evening");
+        tempoMotorLigado = server.arg("activeTime").toFloat();
 
         salvarConfiguracoes();
         server.send(200, "text/plain", "Configurações salvas com sucesso!");
@@ -157,20 +163,19 @@ void handleSaveSettings()
 
 void handleTestMotor()
 {
-    if (server.hasArg(“activeTime”))
+    if (server.hasArg("activeTime"))
     {
-        float testTime = server.arg(“activeTime”).toFloat();
-        Serial.print(“Testando motor por”);
+        float testTime = server.arg("activeTime").toFloat();
+        Serial.print("Testando motor por ");
         Serial.print(testTime);
-        Serial.println(” segundos.”);
+        Serial.println(" segundos.");
 
         meuServo.attach(pinoServo);
-
+        delay(50);
         meuServo.write(0);
         delay(testTime * 1000);
         meuServo.write(160);
-        delay(testTime * 1000);
-
+        delay(500);
         meuServo.detach();
 
         server.send(200, "text/plain", "Teste concluído");
@@ -183,44 +188,32 @@ void handleTestMotor()
 
 void salvarConfiguracoes()
 {
-    File arquivo = SPIFFS.open(“/ config.txt”, “w”);
+    File arquivo = SPIFFS.open("/config.txt", "w"); 
     if (!arquivo)
+    {
+        Serial.println("Erro ao abrir config.txt para escrita");
         return;
-
+    }
     arquivo.println(horarios[0]);
     arquivo.println(horarios[1]);
     arquivo.println(horarios[2]);
     arquivo.println(tempoMotorLigado);
-
     arquivo.close();
     Serial.println("Configurações salvas no SPIFFS.");
 }
 
 void carregarConfiguracoes()
 {
-    File arquivo = SPIFFS.open(“/ config.txt”, “r”);
+    File arquivo = SPIFFS.open("/config.txt", "r");
     if (!arquivo)
     {
-        Serial.println(“Arquivo de config não encontrado, usando padrões.”);
+        Serial.println("Arquivo de config não encontrado, usando padrões.");
         return;
     }
-
-    if (arquivo.available())
-    {
-        horarios[0] = arquivo.readStringUntil('\n');
-    }
-    if (arquivo.available())
-    {
-        horarios[1] = arquivo.readStringUntil('\n');
-    }
-    if (arquivo.available())
-    {
-        horarios[2] = arquivo.readStringUntil('\n');
-    }
-    if (arquivo.available())
-    {
-        tempoMotorLigado = arquivo.readStringUntil('\n').toFloat();
-    }
+    if (arquivo.available()) horarios[0] = arquivo.readStringUntil('\n');
+    if (arquivo.available()) horarios[1] = arquivo.readStringUntil('\n');
+    if (arquivo.available()) horarios[2] = arquivo.readStringUntil('\n');
+    if (arquivo.available()) tempoMotorLigado = arquivo.readStringUntil('\n').toFloat();
 
     horarios[0].trim();
     horarios[1].trim();
