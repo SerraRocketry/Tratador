@@ -1,33 +1,33 @@
 #include <ESP8266WiFi.h>
+#include <DNSServer.h>          // Dependência do WiFiManager
 #include <ESP8266WebServer.h>
+#include <WiFiManager.h>        // Biblioteca para gerenciamento de conexão
 #include <Servo.h>
-#include <FS.h>                 
+#include <FS.h>
 #include <ArduinoJson.h>
-#include <time.h>             
-
-// --- Configurações de Wi-Fi ---
-const char* ssid = "SEU_SSID";      
-const char* password = "SUA_SENHA";
+#include <time.h>
 
 // --- Configurações de Tempo (NTP) ---
 const char* ntpServer = "a.st1.ntp.br";
-const long gmtOffset_sec = -3 * 3600;
+const long gmtOffset_sec = -3 * 3600; 
 const int daylightOffset_sec = 0;
 
 // --- Componentes ---
 Servo meuServo;
 ESP8266WebServer server(80);
-int pinoServo = 2;
+int pinoServo = 2; 
 
 // --- Variáveis de Controle ---
 String horarios[3] = {"07:00", "13:00", "19:00"};
-float tempoMotorLigado = 1.0;
+float tempoMotorLigado = 1.0; 
 bool refeicaoServida[3] = {false, false, false};
 int ultimoDiaDoAno = -1; 
 
 void setup()
 {
     Serial.begin(115200);
+
+    // --- Inicialização dos Componentes ---
     meuServo.attach(pinoServo);
     meuServo.write(160); 
     delay(500);
@@ -41,25 +41,29 @@ void setup()
 
     carregarConfiguracoes();
 
-    // --- Conexão Wi-Fi ---
-    WiFi.begin(ssid, password);
-    Serial.print("Conectando ao WiFi");
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        delay(500);
-        Serial.print(".");
+    // --- Gerenciador de Conexão Wi-Fi ---
+    WiFiManager wifiManager;
+    
+    WiFi.hostname("AlimentadorPet");
+
+    if (!wifiManager.autoConnect("AlimentadorPet-Setup")) {
+        Serial.println("Falha ao conectar e o tempo de configuração expirou. Reiniciando...");
+        delay(3000);
+        ESP.restart();
     }
-    Serial.println("\nWiFi conectado!");
+
+    Serial.println("\nWiFi conectado com sucesso!");
     Serial.print("IP: ");
     Serial.println(WiFi.localIP());
+    Serial.print("Hostname: ");
+    Serial.println(WiFi.hostname());
 
-    // --- Sincronização da Hora ---
+    // --- Sincronização da Hora Pela Internet ---
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
     Serial.print("Sincronizando hora");
-    while (time(nullptr) < 8 * 3600 * 2)
-    {
-        delay(500);
+    while (time(nullptr) < 8 * 3600 * 2) {
         Serial.print(".");
+        delay(500);
     }
     Serial.println("\nHora sincronizada!");
 
@@ -71,7 +75,7 @@ void setup()
     server.on("/", HTTP_GET, []() {
         File file = SPIFFS.open("/index.html", "r");
         if (!file) {
-            server.send(404, "text/plain", "Arquivo index.html nao encontrado");
+            server.send(404, "text/plain", "index.html nao encontrado");
             return;
         }
         server.streamFile(file, "text/html");
@@ -115,6 +119,8 @@ void loop()
     delay(1000); 
 }
 
+// --- Funções de Controle ---
+
 void alimentar()
 {
     meuServo.attach(pinoServo); 
@@ -124,11 +130,13 @@ void alimentar()
     meuServo.write(0);
     delay(tempoMotorLigado * 1000);
     meuServo.write(160);
-    delay(500); 
+    delay(500);
 
     Serial.println("Ração liberada.");
     meuServo.detach(); 
 }
+
+// --- Funções do Servidor Web ---
 
 void handleGetSettings()
 {
@@ -186,9 +194,11 @@ void handleTestMotor()
     }
 }
 
+// --- Funções de Arquivo (SPIFFS) ---
+
 void salvarConfiguracoes()
 {
-    File arquivo = SPIFFS.open("/config.txt", "w"); 
+    File arquivo = SPIFFS.open("/config.txt", "w");
     if (!arquivo)
     {
         Serial.println("Erro ao abrir config.txt para escrita");
